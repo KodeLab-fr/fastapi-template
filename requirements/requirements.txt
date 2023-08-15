@@ -1,0 +1,13 @@
+# imports
+python-dotenv
+
+# api
+fastapi
+uvicorn[standard]
+
+# database
+sqlalchemy[asyncio]
+asyncpg
+psycopg2
+alembic
+aiosqlite
