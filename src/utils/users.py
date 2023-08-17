@@ -5,8 +5,8 @@ from pydantic import BaseModel
 class UserBase(BaseModel):
     username: str
 
-    def __init__(self, username):
-        self.username = username
+    def __init__(self, username: str):
+        super().__init__(username=username)
 
     def __repr__(self):
         return f"<UserBase(username={self.username})>"

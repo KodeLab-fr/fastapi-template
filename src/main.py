@@ -1,8 +1,12 @@
 # FastAPI
 from fastapi import FastAPI
-import uvicorn
-import connection
+import sys
+import os
+from uvicorn import run
+from src import connection
 
+
+sys.path.append(os.getcwd())
 app = FastAPI()
 app.include_router(connection.router)
 
@@ -13,4 +17,4 @@ async def root() -> dict:
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080,  reload=True)
+    run("main:app", host="0.0.0.0", port=8080,  reload=True)

@@ -1,15 +1,22 @@
 from fastapi import APIRouter, Depends
+import os
+print(os.getcwd())
 # sqlalchemy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 # Internal imports
-from utils.users import UserBase
-from utils.models import User
-from utils.db import get_db
+import sys
+# from utils.users import UserBase
+from src.utils.models import User
+from src.utils.db import get_db
+from pydantic import BaseModel
 
 
 router = APIRouter()
 
+
+class UserBase(BaseModel):
+    username: str
 
 @router.post("/user")
 async def index(user: UserBase, db: AsyncSession = Depends(get_db)):
