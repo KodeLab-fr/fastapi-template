@@ -42,7 +42,7 @@ def dev(session: nox.Session) -> None:
 def test(session: nox.Session) -> None:
     session.install("-r", "requirements/test-requirements.txt")
     try:
-        test = session.run("python", "-u", "test/main_test.py")
+        session.run("pytest", "-v", "-s", "test/main_test.py")
     except:
         print("test failed")
         # check if ll test passed well
