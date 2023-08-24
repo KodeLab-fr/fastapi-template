@@ -4,18 +4,18 @@ target-version = ['py36', 'py37', 'py38']
 include = '\.pyi?$'
 exclude = '''
 /(
-  \.eggs/|
-  \.git/|
-  \.hg/|
-  \.mypy_cache/|
-  \.tox/|
-  \.venv/|
-  .nox/|
-  docs/|
-  build/|
-  dist/|
-  \.nox/
-)/
+        \.eggs/|
+        \.git/|
+        \.hg/|
+        \.mypy_cache/|
+        \.tox/|
+        \.venv/|
+        .nox/|
+        docs/|
+        build/|
+        dist/|
+        \.nox/
+ )/
 '''
 
 [tool.isort]
@@ -24,10 +24,10 @@ multi_line_output = 3
 line_length = 88
 force_single_line = true
 known_third_party = [
-  "django",
-  "flask",
-  "numpy",
-  "pandas",
-  "pytest",
-  "requests",
+    "django",
+    "flask",
+    "numpy",
+    "pandas",
+    "pytest",
+    "requests",
 ]

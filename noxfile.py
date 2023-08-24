@@ -1,12 +1,8 @@
-import os
-import subprocess
-
 import dotenv
 import nox
-import requests
-from nox import command
 
 PYTHON_VERSIONS = ["3.11"]
+
 
 @nox.session(
     venv_backend="virtualenv", python=PYTHON_VERSIONS
@@ -24,9 +20,11 @@ def format(session: nox.Session) -> None:
     try:
         session.run("black", "--exclude", ".nox", ".")  # formate le code
         session.run("isort", ".")  # formate les imports
+        session.run("flake8", "src")  # check le code
     except:
         print("formatting failed")
-    
+
+
 @nox.session(venv_backend="virtualenv", python=PYTHON_VERSIONS)
 def dev(session: nox.Session) -> None:
     """_summary_
@@ -38,14 +36,16 @@ def dev(session: nox.Session) -> None:
         "-r", "requirements/dev-requirements.txt"
     )
 
+
 @nox.session(venv_backend="virtualenv", python=PYTHON_VERSIONS)
 def test(session: nox.Session) -> None:
     session.install("-r", "requirements/test-requirements.txt")
     try:
-        session.run("pytest", "-v", "-s", "test/main_test.py")
+        session.run("python", "-m", "pytest", "-v", "-s", "test/main_test.py")
     except:
         print("test failed")
         # check if ll test passed well
+
 
 @nox.session(venv_backend="virtualenv", python=PYTHON_VERSIONS)
 def docs(session: nox.Session) -> None:

@@ -1,8 +1,16 @@
 # imports
 python-dotenv
 
+# email
+secure-smtplib
+
+# cryptography
+argon2-cffi
+PyJWT
+
 # api
 fastapi
+fastapi-mail
 uvicorn[standard]
 
 # database
