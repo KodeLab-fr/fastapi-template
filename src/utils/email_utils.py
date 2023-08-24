@@ -40,7 +40,7 @@ def MessageSchemaDefinition(recipients: List[EmailStr], subject: str, body:  Opt
     )
 
 
-def check_email(email: str) -> bool:
+def is_email(email: str) -> bool:
     if re.fullmatch(regex, email):
         return True
     else:
