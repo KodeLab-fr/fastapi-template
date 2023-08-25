@@ -1,5 +1,5 @@
 # fastapi
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 # sqlalchemy
@@ -22,9 +22,15 @@ import jwt
 from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
+from random import randint
+from sqlalchemy import cast, Date, Result
 # typing
-from typing import Annotated
+from typing import Annotated, Tuple
 
+from starlette.responses import JSONResponse
+from fastapi_mail import FastMail, MessageType
+
+from utils.email_utils import conf, MessageSchemaDefinition
 
 router = APIRouter(prefix="/users",
                    tags=["users"],
@@ -35,77 +41,158 @@ load_dotenv()
 
 
 @router.post("/login")
-async def read_current_user(
+async def login(
         credentials: Annotated[HTTPBasicCredentials, Depends(security)],
-        db: AsyncSession = Depends(get_db),
-        response: Response = Response()):
+        db: AsyncSession = Depends(get_db)):
     try:
         results = await db.execute(
-            select(User.password)
-            .filter(or_(User.username == credentials.username,
-                        User.email == credentials.username)))
+                select(User.password)
+                .filter(or_(User.username == credentials.username,
+                            User.email == credentials.username)))
         password = str(results.scalar())
     except Exception as e:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return {"code": 404,
-                "message": e.args[0]}
+        return JSONResponse(status_code=409,
+                            content={"code": 409,
+                                     "message": e.args[0]})
     ph = PasswordHasher()
     try:
         if ph.verify(password, credentials.password):
-            response.status_code = status.HTTP_202_ACCEPTED
-            print(datetime.now().timestamp())
             try:
                 exp = datetime.now(timezone.utc)+timedelta(hours=24)
                 encoded = jwt.encode({"username": str(credentials.username),
                                       "exp": exp, },
                                      os.getenv("JWT_SECRET"),
                                      algorithm="HS256")
+                return JSONResponse(status_code=202,
+                                    content={"code": 0,
+                                             "message": f"{encoded}"})
             except jwt.exceptions.InvalidKeyError as e:
-                print(e)
-                return {"code": 500,
-                        "message": e.args[0]}
-            return {"code": "0",
-                    "message": encoded}
-            # print(datetime.fromtimestamp())
-
+                return JSONResponse(status_code=500,
+                                    content={"code": 500,
+                                             "message": e.args[0]})
     except argon2.exceptions.VerifyMismatchError as e:
-        response.status_code = status.HTTP_401_UNAUTHORIZED
-        return {"code": 401,
-                "message": e.args[0]}
+        return JSONResponse(status_code=401,
+                            content={"code": 401, "message": e.args[0]})
 
 
 @router.post("/register")
 async def index(user: UserCreation,
-                db: AsyncSession = Depends(get_db),
-                response: Response = Response()):
+                db: AsyncSession = Depends(get_db)):
+    results = await db.execute(
+            select(User.id)
+            .filter(or_(User.username == user.username,
+                        User.email == user.email)))
+    password = str(results.scalar())
+    if password != "None":
+        return JSONResponse(status_code=409,
+                            content={"code": 409,
+                                     "message": "User already exists"})
     format = format_user(user)
     if format["code"] == 0:
+        # Hash the password
         ph = argon2.PasswordHasher(hash_len=64,
                                    parallelism=8,
                                    memory_cost=4096,
                                    time_cost=192)
         hash = ph.hash(user.password)
+        # Generate a random number and send it to the user
+        number: str = f"{randint(0, 999999):06}"
+        number_hash = ph.hash(number)
         try:
-            db_user = User(username=user.username,
-                           email=user.email,
-                           password=hash)
+            html = f"<p>Please enter this number: {number}\
+                    in the application</p>"
+            message = MessageSchemaDefinition([user.email],
+                                              "Authentification number",
+                                              html,
+                                              MessageType.html)
+            fm = FastMail(conf)
+            await fm.send_message(message)
+        except Exception as e:
+            return JSONResponse(status_code=500,
+                                content={"code": 500, "message": e.args[0]})
+        # Send user data to the database
+        try:
+            db_user = TempUser(
+                    username=user.username,
+                    email=user.email,
+                    password=hash,
+                    number=number_hash,
+                    exp=cast(datetime.now()+timedelta(hours=2), Date)
+                    )
             db.add(db_user)
             await db.commit()
             await db.refresh(db_user)
-            return {"code": 0, "message": "User created successfully"}
+            exp = datetime.now(timezone.utc)+timedelta(hours=24)
+            encoded = jwt.encode({"username": str(user.username),
+                                  "exp": exp, },
+                                 os.getenv("JWT_SECRET"),
+                                 algorithm="HS256")
+            return JSONResponse(
+                    content={"code": 0,
+                             "message": f"{encoded}"})
         except IntegrityError as e:
-            print(e.code)
             if e.code == "gkpj":
-                response.status_code = status.HTTP_409_CONFLICT
-                return {"code": 409,
-                        "message": "Username or Email already used"}
+                return JSONResponse(
+                        status_code=409,
+                        content={"code": 409, "message": e.args[0]})
             else:
-                response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-                return {"code": 409,
-                        "message": e.args[0]}
+                return JSONResponse(
+                        status_code=409,
+                        content={"code": 409, "message": e.args[0]})
     else:
-        response.status_code = status.HTTP_409_CONFLICT
-        return format
+        return JSONResponse(status_code=409,
+                            content=format)
+
+
+# ou envoyer token ou alors envoyer username
+@router.post("/confirm")
+async def confirm_user(number: str,
+                       token: str,
+                       db: AsyncSession = Depends(get_db)):
+    # Check if the token is valid and get username
+    try:
+        jwt_token = jwt.decode(
+                token,
+                str(os.getenv("JWT_SECRET")),
+                algorithms=["HS256"])
+        user = jwt_token.get("username")
+    except jwt.exceptions.DecodeError as e:
+        return JSONResponse(status_code=401,
+                            content={"code": 401,
+                                     "message": e.args[0]})
+    # Check if the number is valid
+    try:
+        results: Result[Tuple[TempUser]] = await db.execute(
+                select(TempUser)
+                .filter(TempUser.username == user)
+                )
+        user: TempUser | None = results.scalar()
+        if user is None:
+            return JSONResponse(status_code=404,
+                                content={"code": 404,
+                                         "message": "User not found"})
+        ph = PasswordHasher()
+        if ph.verify(user.number, number):
+            db_user = User(
+                           username=user.username,
+                           email=user.email,
+                           password=user.password,
+                           )
+            db.add(db_user)
+            print(1)
+            await db.commit()
+            await db.refresh(db_user)
+            return JSONResponse(status_code=202,
+                                content={"code": 0,
+                                         "message": "User created"})
+        else:
+            return JSONResponse(status_code=401,
+                                content={"code": 401,
+                                         "message": "Invalid number"})
+    except Exception as e:
+        return JSONResponse(status_code=401,
+                            content={"code": 401,
+                                     "message": e.args[0]})
 
 
 @router.get("/test_token")
@@ -115,8 +202,6 @@ async def test_token(token: str):
                             os.getenv("JWT_SECRET"),
                             algorithms=["HS256"])
         if decode.get("exp") > datetime.now().timestamp():
-            print(datetime.now())
-            print(datetime.fromtimestamp(decode.get("exp")))
             return {"code": 0,
                     "message": "Token is valid"}
     except jwt.exceptions.DecodeError as e:

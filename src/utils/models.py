@@ -23,4 +23,4 @@ class TempUser(Base):
     email: Mapped[str] = mapped_column(unique=True)
     password: Mapped[str] = mapped_column()
     number: Mapped[str] = mapped_column(unique=True)
-    exp: Mapped[datetime.datetime] = mapped_column()
+    exp: Mapped[int]= mapped_column()
