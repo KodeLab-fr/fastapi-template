@@ -1,78 +1,39 @@
 # fastapi
 from fastapi import APIRouter, Depends
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-
 # sqlalchemy
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy import cast, Date, Result
+from fastapi.responses import JSONResponse
+from fastapi_mail import FastMail, MessageType
+from utils.email_utils import conf, MessageSchemaDefinition
 # internal imports
 from utils.db import get_db
 from utils.models import User, TempUser
 from utils.users import UserCreation
 from utils.format import format_user
-
 # scrypting
-import argon2
 from argon2 import PasswordHasher
 import jwt
-
 # utils
-from datetime import datetime, timedelta, timezone
 import os
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from random import randint
-from sqlalchemy import cast, Date, Result
 # typing
-from typing import Annotated, Tuple
+from typing import Tuple
 
-from starlette.responses import JSONResponse
-from fastapi_mail import FastMail, MessageType
-
-from utils.email_utils import conf, MessageSchemaDefinition
+ph = PasswordHasher(hash_len=64,
+                    parallelism=8,
+                    memory_cost=4096,
+                    time_cost=192)
 
 router = APIRouter(prefix="/users",
                    tags=["users"],
                    responses={200: {"description": "Welcome on users route"}},
                    )
-security = HTTPBasic()
 load_dotenv()
-
-
-@router.post("/login")
-async def login(
-        credentials: Annotated[HTTPBasicCredentials, Depends(security)],
-        db: AsyncSession = Depends(get_db)):
-    try:
-        results = await db.execute(
-                select(User.password)
-                .filter(or_(User.username == credentials.username,
-                            User.email == credentials.username)))
-        password = str(results.scalar())
-    except Exception as e:
-        return JSONResponse(status_code=409,
-                            content={"code": 409,
-                                     "message": e.args[0]})
-    ph = PasswordHasher()
-    try:
-        if ph.verify(password, credentials.password):
-            try:
-                exp = datetime.now(timezone.utc)+timedelta(hours=24)
-                encoded = jwt.encode({"username": str(credentials.username),
-                                      "exp": exp, },
-                                     os.getenv("JWT_SECRET"),
-                                     algorithm="HS256")
-                return JSONResponse(status_code=202,
-                                    content={"code": 0,
-                                             "message": f"{encoded}"})
-            except jwt.exceptions.InvalidKeyError as e:
-                return JSONResponse(status_code=500,
-                                    content={"code": 500,
-                                             "message": e.args[0]})
-    except argon2.exceptions.VerifyMismatchError as e:
-        return JSONResponse(status_code=401,
-                            content={"code": 401, "message": e.args[0]})
 
 
 @router.post("/register")
@@ -90,10 +51,6 @@ async def index(user: UserCreation,
     format = format_user(user)
     if format["code"] == 0:
         # Hash the password
-        ph = argon2.PasswordHasher(hash_len=64,
-                                   parallelism=8,
-                                   memory_cost=4096,
-                                   time_cost=192)
         hash = ph.hash(user.password)
         # Generate a random number and send it to the user
         number: str = f"{randint(0, 999999):06}"
@@ -124,7 +81,7 @@ async def index(user: UserCreation,
             await db.refresh(db_user)
             exp = datetime.now(timezone.utc)+timedelta(hours=24)
             encoded = jwt.encode({"username": str(user.username),
-                                  "exp": exp, },
+                                  "exp": exp},
                                  os.getenv("JWT_SECRET"),
                                  algorithm="HS256")
             return JSONResponse(
@@ -171,15 +128,13 @@ async def confirm_user(number: str,
             return JSONResponse(status_code=404,
                                 content={"code": 404,
                                          "message": "User not found"})
-        ph = PasswordHasher()
         if ph.verify(user.number, number):
             db_user = User(
-                           username=user.username,
-                           email=user.email,
-                           password=user.password,
-                           )
+                    username=user.username,
+                    email=user.email,
+                    password=user.password,
+                    )
             db.add(db_user)
-            print(1)
             await db.commit()
             await db.refresh(db_user)
             return JSONResponse(status_code=202,
@@ -193,20 +148,3 @@ async def confirm_user(number: str,
         return JSONResponse(status_code=401,
                             content={"code": 401,
                                      "message": e.args[0]})
-
-
-@router.get("/test_token")
-async def test_token(token: str):
-    try:
-        decode = jwt.decode(token,
-                            os.getenv("JWT_SECRET"),
-                            algorithms=["HS256"])
-        if decode.get("exp") > datetime.now().timestamp():
-            return {"code": 0,
-                    "message": "Token is valid"}
-    except jwt.exceptions.DecodeError as e:
-        return {"code": 401,
-                "message": e.args[0]}
-    except jwt.exceptions.ExpiredSignatureError as e:
-        return {"code": 401,
-                "message": e.args[0]}

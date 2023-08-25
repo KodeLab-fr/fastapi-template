@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from uvicorn import run
 
-from router import connection, test, table
+from router.connection import connection, registration
+from router.test import test
 # from src import connection
 
 app = FastAPI()
 app.include_router(connection.router)
-app.include_router(table.router)
+app.include_router(registration.router)
 app.include_router(test.router)
 
 
