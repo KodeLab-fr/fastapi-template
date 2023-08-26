@@ -16,6 +16,6 @@ uvicorn[standard]
 # database
 sqlalchemy[asyncio]
 asyncpg
-psycopg2
+psycopg2-binary
 alembic
 aiosqlite
