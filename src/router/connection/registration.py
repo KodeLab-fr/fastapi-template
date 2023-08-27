@@ -140,7 +140,6 @@ async def confirm_user(number: str,
                              .where(TempUser.username == user.username))
             await db.commit()
             await db.refresh(db_user)
-            print(2)
             return JSONResponse(status_code=202,
                                 content={"code": 0,
                                          "message": "User created"})
@@ -161,14 +160,14 @@ async def new_code(token: str, db: AsyncSession = Depends(get_db)):
                 token,
                 str(os.getenv("JWT_SECRET")),
                 algorithms=["HS256"])
-        user = jwt_token.get("username")
+        username = jwt_token.get("username")
     except jwt.exceptions.DecodeError:
         return JSONResponse(status_code=401,
                             content={"code": 401,
                                      "message": "User deleted"})
     results: Result[Tuple[str]] = await db.execute(
             select(TempUser.email)
-            .filter(TempUser.username == user)
+            .filter(TempUser.username == username)
             )
     user: str | None = results.scalar()
     if user is None:
@@ -192,9 +191,11 @@ async def new_code(token: str, db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(
                 update(TempUser)
-                .filter(TempUser.username == user)
+                .where(TempUser.username == username)
                 .values(number=number_hash,
-                        exp=cast(datetime.now()+timedelta(hours=2), Date)))
+                        exp=cast(datetime.now()+timedelta(hours=2), Date))
+                )
+        await db.commit()
 
         await db.commit()
         # await db.refresh(user)
