@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 # sqlalchemy
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import cast, Date, Result
 from fastapi.responses import JSONResponse
@@ -136,15 +136,71 @@ async def confirm_user(number: str,
                     password=user.password,
                     )
             db.add(db_user)
+            await db.execute(delete(TempUser)
+                             .where(TempUser.username == user.username))
             await db.commit()
             await db.refresh(db_user)
+            print(2)
             return JSONResponse(status_code=202,
                                 content={"code": 0,
                                          "message": "User created"})
         else:
-            return JSONResponse(status_code=401,
-                                content={"code": 401,
+            return JSONResponse(status_code=402,
+                                content={"code": 402,
                                          "message": "Invalid number"})
+    except Exception as e:
+        return JSONResponse(status_code=401,
+                            content={"code": 401,
+                                     "message": e.args[0]})
+
+
+@router.get("/new_code")
+async def new_code(token: str, db: AsyncSession = Depends(get_db)):
+    try:
+        jwt_token = jwt.decode(
+                token,
+                str(os.getenv("JWT_SECRET")),
+                algorithms=["HS256"])
+        user = jwt_token.get("username")
+    except jwt.exceptions.DecodeError:
+        return JSONResponse(status_code=401,
+                            content={"code": 401,
+                                     "message": "User deleted"})
+    results: Result[Tuple[str]] = await db.execute(
+            select(TempUser.email)
+            .filter(TempUser.username == user)
+            )
+    user: str | None = results.scalar()
+    if user is None:
+        return JSONResponse(status_code=404,
+                            content={"code": 404,
+                                     "message": "User not found"})
+    number: str = f"{randint(0, 999999):06}"
+    number_hash = ph.hash(number)
+    try:
+        html = f"<p>Please enter this number: {number}\
+                in the application</p>"
+        message = MessageSchemaDefinition([user],
+                                          "Authentification number",
+                                          html,
+                                          MessageType.html)
+        fm = FastMail(conf)
+        await fm.send_message(message)
+    except Exception as e:
+        return JSONResponse(status_code=500,
+                            content={"code": 500, "message": e.args[0]})
+    try:
+        await db.execute(
+                update(TempUser)
+                .filter(TempUser.username == user)
+                .values(number=number_hash,
+                        exp=cast(datetime.now()+timedelta(hours=2), Date)))
+
+        await db.commit()
+        # await db.refresh(user)
+        return JSONResponse(status_code=202,
+                            content={"code": 0,
+                                     "message": "New code sent"})
     except Exception as e:
         return JSONResponse(status_code=401,
                             content={"code": 401,

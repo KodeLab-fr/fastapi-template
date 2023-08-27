@@ -4,5 +4,5 @@ RUN apk add --no-cache gcc musl-dev linux-headers
 COPY requirements requirements
 RUN pip install -r requirements/requirements.txt
 EXPOSE 8080
-COPY . .
-CMD ["python", "src/main.py"]
+CMD ["python", "/src/main.py"]
+
