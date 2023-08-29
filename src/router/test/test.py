@@ -27,7 +27,7 @@ async def test_token(token: str):
                             os.getenv("JWT_SECRET"),
                             algorithms=["HS256"])
         if decode.get("exp") > datetime.now().timestamp():
-            return JSONResponse(content={"code": 200,
+            return JSONResponse(content={"code": 0,
                                          "message": "Token is valid"})
     except jwt.exceptions.DecodeError as e:
         return JSONResponse(status_code=401,
